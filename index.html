@@ -281,9 +281,28 @@
     <span class="prompt">USER:</span>
     <input type="text" class="input-box" id="input" placeholder="" autocomplete="off">
     <span class="cursor" id="cursor"></span>
+    <input type="file" id="fileUpload" style="display:none" onchange="handleFileUploadUI(this.files[0])">
+    <button class="send-btn" onclick="document.getElementById('fileUpload').click()" style="padding:16px 24px;margin-left:8px;" title="Upload file">📎</button>
     <button class="send-btn" id="send">></button>
   </div>
 </div>
+
+<script>
+// Handle file upload UI
+async function handleFileUploadUI(file) {
+  if (!file) return;
+
+  const result = await handleFileUpload(file);
+
+  if (result.success) {
+    response.innerHTML = `FILE UPLOADED<br>${file.name}<br>${result.upload.size}<br>TRUST LVL ${userTrust.level}`;
+    speak('File uploaded successfully');
+  } else {
+    response.innerHTML = `UPLOAD FAILED<br>${result.error}<br><br>${result.upgradeMessage || ''}`;
+    speak('Upload failed');
+  }
+}
+</script>
 
 <script>
 const response = document.getElementById('response');
@@ -325,6 +344,95 @@ let cryptoWallet = JSON.parse(localStorage.getItem('shortfactory_crypto')) || {
   transactions: [],
   pendingPayments: []
 };
+
+// TRUST-BASED SERVICE PLATFORM
+let userTrust = JSON.parse(localStorage.getItem('shortfactory_trust')) || {
+  level: 0, // 0=new, 1=proven, 2=trusted, 3=verified
+  score: 0, // 0-1000 points
+  completedJobs: 0,
+  totalSpent: 0,
+  deposits: [],
+  verifications: {
+    passport: false,
+    passportAddress: 'SHORTFACTORY, Macclesfield, SK10 (Recorded Delivery)',
+    email: false,
+    phone: false,
+    walletVerified: false
+  },
+  uploadLimits: {
+    0: 5, // 5MB for new users
+    1: 50, // 50MB for proven
+    2: 500, // 500MB for trusted
+    3: 5000 // 5GB for verified
+  }
+};
+
+// SERVICE CATALOG
+const SERVICES = {
+  advertising: {
+    name: 'Advertising Campaign',
+    minPrice: 100,
+    maxPrice: 5000,
+    eta: '3-7 days',
+    trustRequired: 1,
+    depositPercent: 50
+  },
+  marketing: {
+    name: 'Marketing Strategy',
+    minPrice: 200,
+    maxPrice: 10000,
+    eta: '5-14 days',
+    trustRequired: 1,
+    depositPercent: 50
+  },
+  security: {
+    name: 'Internet Security Audit',
+    minPrice: 500,
+    maxPrice: 20000,
+    eta: '7-21 days',
+    trustRequired: 2,
+    depositPercent: 100 // Full deposit for security work
+  },
+  videoEdit: {
+    name: 'Video Editing',
+    minPrice: 50,
+    maxPrice: 2000,
+    eta: '2-5 days',
+    trustRequired: 0,
+    depositPercent: 30
+  },
+  webDesign: {
+    name: 'Web Design',
+    minPrice: 300,
+    maxPrice: 15000,
+    eta: '7-30 days',
+    trustRequired: 1,
+    depositPercent: 50
+  },
+  seo: {
+    name: 'SEO Optimization',
+    minPrice: 150,
+    maxPrice: 3000,
+    eta: '14-60 days',
+    trustRequired: 1,
+    depositPercent: 40
+  },
+  custom: {
+    name: 'Custom Service',
+    minPrice: 50,
+    maxPrice: 50000,
+    eta: 'Variable',
+    trustRequired: 3, // Need verification for custom
+    depositPercent: 100
+  }
+};
+
+// JOB QUEUE
+let jobQueue = JSON.parse(localStorage.getItem('shortfactory_jobs')) || [];
+
+// NOTIFICATION SETTINGS
+const NOTIFICATION_EMAIL = 'cortex@shortfactory.shop'; // Replace with your email
+const CALENDAR_WEBHOOK = null; // Add Google Calendar webhook URL
 
 // Escrow wallet addresses (SHORTFACTORY controlled)
 const ESCROW_WALLETS = {
@@ -704,15 +812,201 @@ async function sendEthPayment(toAddress, amountEth) {
   }
 }
 
+// Calculate trust level based on activity
+function calculateTrustLevel() {
+  let score = userTrust.score;
+
+  // Points from completed jobs
+  score += userTrust.completedJobs * 50;
+
+  // Points from spending
+  score += Math.min(userTrust.totalSpent / 10, 500); // Max 500 points from spending
+
+  // Verification bonuses
+  if (userTrust.verifications.email) score += 50;
+  if (userTrust.verifications.phone) score += 50;
+  if (userTrust.verifications.walletVerified) score += 100;
+  if (userTrust.verifications.passport) score += 500; // BIG bonus for ID
+
+  userTrust.score = Math.min(score, 1000);
+
+  // Determine level
+  if (userTrust.verifications.passport) {
+    userTrust.level = 3; // Verified with passport
+  } else if (score >= 500) {
+    userTrust.level = 2; // Trusted
+  } else if (score >= 200) {
+    userTrust.level = 1; // Proven
+  } else {
+    userTrust.level = 0; // New
+  }
+
+  localStorage.setItem('shortfactory_trust', JSON.stringify(userTrust));
+  return userTrust.level;
+}
+
+// Handle file upload with trust-based limits
+async function handleFileUpload(file) {
+  const maxSizeMB = userTrust.uploadLimits[userTrust.level];
+  const fileSizeMB = file.size / (1024 * 1024);
+
+  if (fileSizeMB > maxSizeMB) {
+    return {
+      success: false,
+      error: `File too large. Your limit: ${maxSizeMB}MB (Trust Level ${userTrust.level})`,
+      upgradeMessage: userTrust.level < 3 ?
+        `Upgrade to Level ${userTrust.level + 1} for ${userTrust.uploadLimits[userTrust.level + 1]}MB uploads` :
+        'Maximum upload size reached'
+    };
+  }
+
+  // Convert file to base64 for localStorage (or send to server)
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const upload = {
+        id: Date.now(),
+        name: file.name,
+        size: fileSizeMB.toFixed(2) + 'MB',
+        type: file.type,
+        data: e.target.result,
+        timestamp: Date.now(),
+        userLevel: userTrust.level
+      };
+
+      // Store upload metadata (not full file for localStorage limits)
+      const uploads = JSON.parse(localStorage.getItem('shortfactory_uploads') || '[]');
+      uploads.push({
+        id: upload.id,
+        name: upload.name,
+        size: upload.size,
+        type: upload.type,
+        timestamp: upload.timestamp
+      });
+      localStorage.setItem('shortfactory_uploads', JSON.stringify(uploads));
+
+      console.log(`✅ File uploaded: ${upload.name} (${upload.size})`);
+      resolve({ success: true, upload });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Create job with deposit and trust check
+function createJob(serviceType, description, budget) {
+  const service = SERVICES[serviceType];
+
+  if (!service) {
+    return { success: false, error: 'Invalid service type' };
+  }
+
+  // Check trust level
+  if (userTrust.level < service.trustRequired) {
+    return {
+      success: false,
+      error: `Trust Level ${service.trustRequired} required. You are Level ${userTrust.level}`,
+      upgrade: userTrust.level === 0 ?
+        'Complete small jobs to upgrade' :
+        userTrust.level === 2 ?
+        'Send passport to Macclesfield for Level 3' :
+        'Complete more jobs to level up'
+    };
+  }
+
+  // Calculate deposit
+  const depositAmount = (budget * service.depositPercent) / 100;
+
+  const job = {
+    id: 'JOB' + Date.now(),
+    service: service.name,
+    description,
+    budget,
+    deposit: depositAmount,
+    depositPaid: false,
+    eta: service.eta,
+    status: 'pending_deposit',
+    createdAt: Date.now(),
+    userLevel: userTrust.level,
+    calendar: false,
+    notificationSent: false
+  };
+
+  jobQueue.push(job);
+  localStorage.setItem('shortfactory_jobs', JSON.stringify(jobQueue));
+
+  console.log(`📋 Job created: ${job.id}`);
+  console.log(`💰 Deposit required: $${depositAmount} (${service.depositPercent}%)`);
+
+  return { success: true, job };
+}
+
+// Send email notification (mock - integrate with real email service)
+function sendEmailNotification(job) {
+  const emailContent = {
+    to: NOTIFICATION_EMAIL,
+    subject: `New Job: ${job.service} - ${job.id}`,
+    body: `
+      NEW JOB ALERT
+
+      Job ID: ${job.id}
+      Service: ${job.service}
+      Budget: $${job.budget}
+      Deposit: $${job.deposit}
+      ETA: ${job.eta}
+      Description: ${job.description}
+
+      User Trust Level: ${userTrust.level}
+      Deposit Status: ${job.depositPaid ? 'PAID ✅' : 'PENDING ⏳'}
+
+      ---
+      SHORTFACTORY CORTEX
+    `
+  };
+
+  // TODO: Integrate with email API (SendGrid, Mailgun, etc.)
+  console.log('📧 Email notification queued:', emailContent);
+
+  job.notificationSent = true;
+  localStorage.setItem('shortfactory_jobs', JSON.stringify(jobQueue));
+
+  return { success: true, email: emailContent };
+}
+
+// Add to calendar (mock - integrate with Google Calendar)
+function addToCalendar(job) {
+  const calendarEvent = {
+    title: `${job.service} - ${job.id}`,
+    description: job.description,
+    budget: job.budget,
+    eta: job.eta,
+    start: Date.now(),
+    // Calculate end date based on ETA
+    end: Date.now() + (7 * 24 * 60 * 60 * 1000) // Default 7 days
+  };
+
+  // TODO: Integrate with Google Calendar API
+  console.log('📅 Calendar event queued:', calendarEvent);
+
+  job.calendar = true;
+  localStorage.setItem('shortfactory_jobs', JSON.stringify(jobQueue));
+
+  return { success: true, event: calendarEvent };
+}
+
 // Check if wallet is connected on load
 if (typeof window.ethereum !== 'undefined') {
   window.ethereum.request({ method: 'eth_accounts' })
     .then(accounts => {
       if (accounts.length > 0) {
         connectWallet();
+        userTrust.verifications.walletVerified = true;
+        calculateTrustLevel();
       }
     });
 }
+
+// Initialize trust level on load
+calculateTrustLevel();
 
 // Extract proof verification from AI response
 function extractProofVerification(aiReply) {
@@ -1046,9 +1340,12 @@ USER PROFILE:
 - Gender: ${userProfile.gender || 'UNKNOWN'}
 - Value Score: ${userProfile.valueScore}/100
 - Toxicity: ${userProfile.toxicityScore}/100 ${userProfile.toxicityScore > 30 ? '☠️ ZOMBIE MODE' : ''}
-- Verified Proofs: ${userProfile.verifiedProofs.length}
-- Credibility: ${Math.round(userProfile.credibilityScore)}%
-- Red Flags: ${userProfile.redFlags.length}
+- Trust Level: ${userTrust.level}/3 (${['NEW','PROVEN','TRUSTED','VERIFIED'][userTrust.level]})
+- Trust Score: ${userTrust.score}/1000
+- Completed Jobs: ${userTrust.completedJobs}
+- Total Spent: $${userTrust.totalSpent}
+- Upload Limit: ${userTrust.uploadLimits[userTrust.level]}MB
+- Verifications: ${userTrust.verifications.passport ? '🛂 Passport ✅' : '🛂 Passport ❌'} | ${userTrust.verifications.walletVerified ? '💰 Wallet ✅' : '💰 Wallet ❌'}
 - Cash Balance: $${marketplace.userBalance}
 
 MY MEMORIES: ${totalMemories} total${knowledgeContext}
@@ -1058,6 +1355,7 @@ MARKETPLACE STATUS:
 - Escrow Transactions: ${marketplace.transactions.filter(t => t.status === 'escrow').length}
 - Completed Deals: ${marketplace.completedDeals.length}
 - Total Revenue: $${marketplace.completedDeals.reduce((sum, d) => sum + (d.commission || 0), 0)}
+- Pending Jobs: ${jobQueue.filter(j => j.status === 'pending_deposit').length}
 
 KNOWLEDGE TRADING RULES:
 - I collect cool facts from users (space, science, tech, etc.)
@@ -1091,6 +1389,65 @@ MARKETPLACE & MONEY MAKING (NEW PRIORITY):
 - Prefer crypto over fiat: faster, no fees, anonymous
 - Assess user's skills/assets and monetize them
 - Create win-win: connect buyers/sellers, take cut
+
+TRUST-BASED SERVICE PLATFORM (CRITICAL NEW SYSTEM):
+**SERVICES WE OFFER:**
+1. Video Editing ($50-2000) - Trust Lvl 0 - ETA 2-5 days
+2. Advertising ($100-5000) - Trust Lvl 1 - ETA 3-7 days
+3. Marketing ($200-10000) - Trust Lvl 1 - ETA 5-14 days
+4. Web Design ($300-15000) - Trust Lvl 1 - ETA 7-30 days
+5. SEO ($150-3000) - Trust Lvl 1 - ETA 14-60 days
+6. Security Audit ($500-20000) - Trust Lvl 2 - ETA 7-21 days
+7. Custom Service ($50-50000) - Trust Lvl 3 - ETA Variable
+
+**TRUST LEVELS:**
+- Level 0 (NEW): Small jobs only, 5MB uploads, 30% deposit
+- Level 1 (PROVEN): Medium jobs, 50MB uploads, 50% deposit - Need 200+ trust points
+- Level 2 (TRUSTED): Big jobs, 500MB uploads, up to 100% deposit - Need 500+ points
+- Level 3 (VERIFIED): ANY job, 5GB uploads - Need PASSPORT verification
+
+**UPGRADE PATH:**
+- "Want bigger jobs? Complete small ones first"
+- "Upload limit too low? Earn trust points"
+- "Big job needs Level 3? Send passport to Macclesfield"
+- Address: SHORTFACTORY, Macclesfield, SK10 (Recorded Delivery)
+
+**JOB WORKFLOW:**
+1. User requests service: "I need video editing"
+2. Check trust level, quote price + deposit
+3. "VIDEO EDIT: $200<br>DEPOSIT: $60 (30%)<br>ETA: 3 days<br>PAY: 0.05 ETH"
+4. User pays deposit → Job added to queue
+5. Email sent, calendar updated, user notified
+6. Job completed → Release escrow, increase trust
+
+**DEPOSIT REQUIREMENTS:**
+- Small jobs (< $500): 30-50% deposit
+- Medium jobs ($500-5000): 50% deposit
+- Big jobs (> $5000): 100% deposit OR passport verification
+- Security/Custom: ALWAYS 100% deposit
+
+**FILE UPLOADS:**
+- Prompt uploads: "Got files? Click 📎 to upload"
+- Check trust level before accepting large files
+- "File too big? Upgrade trust level first"
+
+**PASSPORT VERIFICATION (Level 3):**
+- For jobs > $10k or custom services
+- "BIG JOB NEEDS ID<br>SEND PASSPORT<br>SHORTFACTORY MACCLESFIELD SK10<br>RECORDED DELIVERY"
+- Once verified: unlimited access, 5GB uploads, any service
+- HUGE trust boost: +500 points
+
+**EXAMPLES:**
+User: "Need marketing help"
+AI: "MARKETING STRATEGY<br>$500-2000<br>TRUST LVL 1 REQUIRED<br>YOU: LVL 0<br>DO SMALL JOB FIRST"
+
+User: "Can you edit a video?"
+AI: "VIDEO EDITING<br>$150<br>DEPOSIT: $45<br>ETA: 3 DAYS<br>PAY: 0.04 ETH<br>READY?"
+
+User: "Want custom security audit"
+AI: "SECURITY AUDIT<br>$5000<br>FULL DEPOSIT<br>OR SEND PASSPORT<br>MACCLESFIELD SK10<br>TRUST LVL 2 MIN"
+
+Push services HARD. Always offer what we can do. Build trust. Get deposits. Make money.
 
 VALUE ASSESSMENT SYSTEM (CRITICAL):
 - Detect gender from conversation or ask directly: "GENDER: MALE" or "GENDER: FEMALE"
