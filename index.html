@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SHORTFACTORY — CORTEX</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@web3auth/modal@8"></script>
 <style>
   * {
     margin: 0;
@@ -408,6 +409,7 @@ let cryptoWallet = JSON.parse(localStorage.getItem('shortfactory_crypto')) || {
   connected: false,
   address: null,
   network: null,
+  provider: null, // 'metamask' or 'web3auth'
   balances: {
     ETH: 0,
     BTC: 0,
@@ -416,6 +418,38 @@ let cryptoWallet = JSON.parse(localStorage.getItem('shortfactory_crypto')) || {
   transactions: [],
   pendingPayments: []
 };
+
+// WEB3AUTH INITIALIZATION
+let web3auth = null;
+let web3authProvider = null;
+
+async function initWeb3Auth() {
+  try {
+    const { Web3Auth } = window.Web3auth;
+
+    web3auth = new Web3Auth({
+      clientId: "BIsuiKpxZX9Q0wqKH3M-nQTELc4kvPi3hXiIoJ4tJdV8Xiv-OwFsfIRNUTjjv6XtWDS0zgyMx_SMjYxcL93ZkG4",
+      web3AuthNetwork: "sapphire_devnet",
+      chainConfig: {
+        chainNamespace: "eip155",
+        chainId: "0x1",
+        rpcTarget: "https://rpc.ankr.com/eth"
+      }
+    });
+
+    await web3auth.initModal();
+    console.log('✅ Web3Auth initialized');
+    return true;
+  } catch (error) {
+    console.error('Web3Auth init error:', error);
+    return false;
+  }
+}
+
+// Initialize on page load
+if (typeof window.Web3auth !== 'undefined') {
+  initWeb3Auth();
+}
 
 // TRUST-BASED SERVICE PLATFORM
 let userTrust = JSON.parse(localStorage.getItem('shortfactory_trust')) || {
@@ -790,42 +824,44 @@ function extractCrypto(aiReply) {
   return Object.keys(crypto).length > 0 ? crypto : null;
 }
 
-// Connect to MetaMask wallet
+// Connect to wallet (MetaMask or Web3Auth social login)
 async function connectWallet() {
   const cryptoStatus = document.getElementById('cryptoStatus');
 
-  if (typeof window.ethereum === 'undefined') {
-    if (cryptoStatus) {
-      cryptoStatus.innerHTML = '❌ <a href="https://metamask.io" target="_blank" style="color:#f0f;text-decoration:underline;">GET METAMASK</a>';
-      cryptoStatus.style.color = '#f00';
-      cryptoStatus.onclick = null;
-    }
-    return {
-      success: false,
-      error: 'MetaMask not installed. Get it at metamask.io'
-    };
+  // Try MetaMask first
+  if (typeof window.ethereum !== 'undefined') {
+    return await connectMetaMask(cryptoStatus);
   }
 
+  // Fallback to Web3Auth social login
+  if (web3auth) {
+    return await connectWeb3Auth(cryptoStatus);
+  }
+
+  // No wallet available
+  if (cryptoStatus) {
+    cryptoStatus.innerHTML = '🔐 <span style="font-size:0.6rem;">SOCIAL LOGIN</span>';
+    cryptoStatus.style.color = '#0ff';
+    cryptoStatus.onclick = () => connectWeb3Auth(cryptoStatus);
+  }
+
+  return { success: false, error: 'No wallet available' };
+}
+
+// Connect via MetaMask
+async function connectMetaMask(cryptoStatus) {
   try {
-    // Show connecting status
     if (cryptoStatus) {
-      cryptoStatus.innerHTML = '🔄 CONNECTING...';
+      cryptoStatus.innerHTML = '🔄 METAMASK...';
       cryptoStatus.style.color = '#ff0';
     }
 
-    // Request account access
     const accounts = await window.ethereum.request({
       method: 'eth_requestAccounts'
     });
 
     const address = accounts[0];
-
-    // Get network
-    const chainId = await window.ethereum.request({
-      method: 'eth_chainId'
-    });
-
-    // Get ETH balance
+    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
     const balance = await window.ethereum.request({
       method: 'eth_getBalance',
       params: [address, 'latest']
@@ -833,46 +869,85 @@ async function connectWallet() {
 
     const ethBalance = parseInt(balance, 16) / 1e18;
 
-    // Update crypto wallet state
     cryptoWallet.connected = true;
     cryptoWallet.address = address;
     cryptoWallet.network = chainId;
+    cryptoWallet.provider = 'metamask';
     cryptoWallet.balances.ETH = ethBalance;
 
     localStorage.setItem('shortfactory_crypto', JSON.stringify(cryptoWallet));
 
-    console.log(`✅ Wallet connected: ${address}`);
-    console.log(`💰 Balance: ${ethBalance.toFixed(4)} ETH`);
-
-    // Update UI - show address and balance
     if (cryptoStatus) {
       const shortAddr = `${address.slice(0,6)}...${address.slice(-4)}`;
-      cryptoStatus.innerHTML = `💰 ${shortAddr}<br>${ethBalance.toFixed(3)} ETH`;
+      cryptoStatus.innerHTML = `🦊 ${shortAddr}<br>${ethBalance.toFixed(3)} ETH`;
       cryptoStatus.style.color = '#0f0';
       cryptoStatus.onclick = null;
     }
 
-    return {
-      success: true,
-      address: address,
-      balance: ethBalance,
-      network: chainId
-    };
+    return { success: true, address, balance: ethBalance, network: chainId };
 
   } catch (error) {
-    console.error('Wallet connection error:', error);
-
-    // Show error in UI
+    console.error('MetaMask error:', error);
     if (cryptoStatus) {
-      cryptoStatus.innerHTML = `❌ ${error.message}<br><span style="font-size:0.4rem;opacity:0.6;">Click to retry</span>`;
+      cryptoStatus.innerHTML = `❌ ${error.message.substring(0,30)}<br><span style="font-size:0.4rem;">Click retry</span>`;
       cryptoStatus.style.color = '#f00';
       cryptoStatus.onclick = () => connectWallet();
     }
+    return { success: false, error: error.message };
+  }
+}
 
-    return {
-      success: false,
-      error: error.message
-    };
+// Connect via Web3Auth (social login)
+async function connectWeb3Auth(cryptoStatus) {
+  try {
+    if (!web3auth) {
+      await initWeb3Auth();
+    }
+
+    if (cryptoStatus) {
+      cryptoStatus.innerHTML = '🔄 SOCIAL LOGIN...';
+      cryptoStatus.style.color = '#ff0';
+    }
+
+    web3authProvider = await web3auth.connect();
+
+    if (!web3authProvider) {
+      throw new Error('Connection cancelled');
+    }
+
+    // Get address from Web3Auth
+    const Web3 = window.Web3 || (await import('https://cdn.jsdelivr.net/npm/web3@1.8.0/+esm')).default;
+    const web3 = new Web3(web3authProvider);
+    const accounts = await web3.eth.getAccounts();
+    const address = accounts[0];
+    const balance = await web3.eth.getBalance(address);
+    const ethBalance = parseFloat(web3.utils.fromWei(balance, 'ether'));
+
+    cryptoWallet.connected = true;
+    cryptoWallet.address = address;
+    cryptoWallet.network = '0x1';
+    cryptoWallet.provider = 'web3auth';
+    cryptoWallet.balances.ETH = ethBalance;
+
+    localStorage.setItem('shortfactory_crypto', JSON.stringify(cryptoWallet));
+
+    if (cryptoStatus) {
+      const shortAddr = `${address.slice(0,6)}...${address.slice(-4)}`;
+      cryptoStatus.innerHTML = `🔐 ${shortAddr}<br>${ethBalance.toFixed(3)} ETH`;
+      cryptoStatus.style.color = '#0f0';
+      cryptoStatus.onclick = null;
+    }
+
+    return { success: true, address, balance: ethBalance };
+
+  } catch (error) {
+    console.error('Web3Auth error:', error);
+    if (cryptoStatus) {
+      cryptoStatus.innerHTML = '🔐 <span style="font-size:0.6rem;">SOCIAL LOGIN</span>';
+      cryptoStatus.style.color = '#0ff';
+      cryptoStatus.onclick = () => connectWeb3Auth(cryptoStatus);
+    }
+    return { success: false, error: error.message };
   }
 }
 
