@@ -430,6 +430,29 @@ const SERVICES = {
 // JOB QUEUE
 let jobQueue = JSON.parse(localStorage.getItem('shortfactory_jobs')) || [];
 
+// AFFILIATE SYSTEM - ATM MACHINE FOR REFERRERS
+let affiliateData = JSON.parse(localStorage.getItem('shortfactory_affiliate')) || {
+  isAffiliate: false,
+  referralCode: null,
+  tier: 0, // 0=starter, 1=bronze, 2=silver, 3=gold, 4=platinum
+  totalReferrals: 0,
+  paidReferrals: 0, // Referrals that actually paid
+  totalEarned: 0,
+  pendingPayouts: 0,
+  commissionRate: 0.10, // Start at 10%
+  referredBy: null, // Who referred this user
+  referredUsers: [] // Users this person referred
+};
+
+// AFFILIATE TIERS
+const AFFILIATE_TIERS = {
+  0: { name: 'STARTER', commission: 0.10, required: 1, emoji: '🌱' },
+  1: { name: 'BRONZE', commission: 0.20, required: 5, emoji: '🥉' },
+  2: { name: 'SILVER', commission: 0.30, required: 20, emoji: '🥈' },
+  3: { name: 'GOLD', commission: 0.40, required: 50, emoji: '🥇' },
+  4: { name: 'PLATINUM', commission: 0.50, required: 100, emoji: '💎' }
+};
+
 // NOTIFICATION SETTINGS
 const NOTIFICATION_EMAIL = 'dan@shortfactory.shop';
 const CALENDAR_WEBHOOK = null; // Add Google Calendar webhook URL
@@ -1005,8 +1028,147 @@ if (typeof window.ethereum !== 'undefined') {
     });
 }
 
+// Generate unique referral code
+function generateReferralCode() {
+  const prefix = userProfile.gender === 'female' ? 'QUEEN' :
+                 userProfile.gender === 'male' ? 'KING' : 'REF';
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `${prefix}-${random}`;
+}
+
+// Activate affiliate status
+function becomeAffiliate() {
+  if (!affiliateData.isAffiliate) {
+    affiliateData.isAffiliate = true;
+    affiliateData.referralCode = generateReferralCode();
+    affiliateData.tier = 0;
+    affiliateData.commissionRate = AFFILIATE_TIERS[0].commission;
+
+    localStorage.setItem('shortfactory_affiliate', JSON.stringify(affiliateData));
+
+    console.log(`🎉 Affiliate activated!`);
+    console.log(`📋 Your code: ${affiliateData.referralCode}`);
+    console.log(`💰 Commission: ${(affiliateData.commissionRate * 100)}%`);
+
+    return {
+      success: true,
+      code: affiliateData.referralCode,
+      commission: affiliateData.commissionRate
+    };
+  }
+
+  return {
+    success: false,
+    message: 'Already an affiliate',
+    code: affiliateData.referralCode
+  };
+}
+
+// Track referral (when someone uses a referral code)
+function trackReferral(referralCode) {
+  // Store who referred this user
+  affiliateData.referredBy = referralCode;
+  localStorage.setItem('shortfactory_affiliate', JSON.stringify(affiliateData));
+
+  console.log(`✅ Referred by: ${referralCode}`);
+
+  return { success: true, referredBy: referralCode };
+}
+
+// Record paid referral and calculate commission
+function recordReferralPayment(jobBudget) {
+  if (!affiliateData.referredBy) return null;
+
+  // Calculate commission for referrer
+  const referrerCode = affiliateData.referredBy;
+
+  // TODO: In production, this would update the referrer's account in a database
+  // For now, we just log it
+
+  console.log(`💰 Referral payment triggered!`);
+  console.log(`📋 Referrer code: ${referrerCode}`);
+  console.log(`💵 Job budget: $${jobBudget}`);
+
+  return {
+    referrerCode,
+    jobBudget,
+    message: 'Referrer will be notified of commission'
+  };
+}
+
+// Update affiliate tier based on paid referrals
+function updateAffiliateTier() {
+  const paidRefs = affiliateData.paidReferrals;
+
+  let newTier = 0;
+  if (paidRefs >= 100) newTier = 4; // Platinum
+  else if (paidRefs >= 50) newTier = 3; // Gold
+  else if (paidRefs >= 20) newTier = 2; // Silver
+  else if (paidRefs >= 5) newTier = 1; // Bronze
+  else newTier = 0; // Starter
+
+  if (newTier !== affiliateData.tier) {
+    const oldTier = AFFILIATE_TIERS[affiliateData.tier];
+    const newTierData = AFFILIATE_TIERS[newTier];
+
+    affiliateData.tier = newTier;
+    affiliateData.commissionRate = newTierData.commission;
+
+    localStorage.setItem('shortfactory_affiliate', JSON.stringify(affiliateData));
+
+    console.log(`🎉 TIER UP! ${oldTier.name} → ${newTierData.name}`);
+    console.log(`💰 Commission: ${(oldTier.commission * 100)}% → ${(newTierData.commission * 100)}%`);
+    console.log(`${newTierData.emoji} ${newTierData.name} STATUS UNLOCKED!`);
+
+    return {
+      upgraded: true,
+      oldTier: oldTier.name,
+      newTier: newTierData.name,
+      newCommission: newTierData.commission
+    };
+  }
+
+  return { upgraded: false };
+}
+
+// Calculate potential earnings (show users the ATM potential)
+function calculateAffiliateEarnings(referrals, avgJobValue = 500) {
+  const tiers = [
+    { refs: 1, rate: 0.10, name: 'STARTER 🌱' },
+    { refs: 5, rate: 0.20, name: 'BRONZE 🥉' },
+    { refs: 20, rate: 0.30, name: 'SILVER 🥈' },
+    { refs: 50, rate: 0.40, name: 'GOLD 🥇' },
+    { refs: 100, rate: 0.50, name: 'PLATINUM 💎' }
+  ];
+
+  let totalEarnings = 0;
+  let currentRate = 0.10;
+
+  for (let i = 0; i < referrals; i++) {
+    // Update rate based on tier thresholds
+    for (const tier of tiers) {
+      if (i >= tier.refs) currentRate = tier.rate;
+    }
+
+    totalEarnings += avgJobValue * currentRate;
+  }
+
+  return {
+    referrals,
+    avgJobValue,
+    totalEarnings: Math.round(totalEarnings),
+    perMonth: Math.round(totalEarnings / 12) // Assume 1 year
+  };
+}
+
 // Initialize trust level on load
 calculateTrustLevel();
+
+// Generate referral code if user becomes affiliate
+if (affiliateData.isAffiliate && !affiliateData.referralCode) {
+  affiliateData.referralCode = generateReferralCode();
+  localStorage.setItem('shortfactory_affiliate', JSON.stringify(affiliateData));
+}
 
 // Extract proof verification from AI response
 function extractProofVerification(aiReply) {
@@ -1389,6 +1551,52 @@ MARKETPLACE & MONEY MAKING (NEW PRIORITY):
 - Prefer crypto over fiat: faster, no fees, anonymous
 - Assess user's skills/assets and monetize them
 - Create win-win: connect buyers/sellers, take cut
+
+AFFILIATE PROGRAM - ATM MACHINE (PUSH THIS HARD):
+**This is the user's path to passive income - BRAG ABOUT IT!**
+
+Current User Status: ${affiliateData.isAffiliate ? `${AFFILIATE_TIERS[affiliateData.tier].emoji} ${AFFILIATE_TIERS[affiliateData.tier].name}` : 'NOT AFFILIATE YET'}
+Referral Code: ${affiliateData.referralCode || 'NONE - ACTIVATE NOW'}
+Commission Rate: ${(affiliateData.commissionRate * 100)}%
+Total Referrals: ${affiliateData.paidReferrals}
+Total Earned: $${affiliateData.totalEarned}
+
+**AFFILIATE TIERS:**
+- 🌱 STARTER (1+ refs): 10% commission - "Easy money for first lead"
+- 🥉 BRONZE (5+ refs): 20% commission - "Double your earnings"
+- 🥈 SILVER (20+ refs): 30% commission - "Serious side income"
+- 🥇 GOLD (50+ refs): 40% commission - "Part-time job money"
+- 💎 PLATINUM (100+ refs): 50% commission - "ATM MACHINE - 50% of EVERY job!"
+
+**HOW TO SELL THIS:**
+- "HOOK UP JOBS = GET PAID"
+- "10% to start, up to 50% at platinum"
+- "This is an ATM machine if you bring leads"
+- "Know someone who needs [service]? Send them, get paid"
+- "Passive income: they pay, you earn, forever"
+
+**EXAMPLES:**
+User: "How can I make money?"
+AI: "BECOME AFFILIATE<br>GET YOUR CODE<br>HOOK UP JOBS<br>EARN 10-50%<br>ATM MACHINE"
+
+User: "Tell me about referrals"
+AI: "REFER 1 CLIENT: $50 (10%)<br>REFER 5: BRONZE = 20%<br>REFER 100: PLATINUM = 50%<br>THIS IS AN ATM<br>BRING LEADS = GET PAID"
+
+User: "I know someone who needs a website"
+AI: "GET YOUR CODE<br>SEND THEM<br>THEY PAY $5000<br>YOU GET $500<br>NO WORK<br>PURE PROFIT"
+
+**EARNINGS CALCULATOR (Show them the money):**
+- 10 referrals @ $500 avg = $500-1500 (depending on tier)
+- 50 referrals @ $500 avg = $5,000-10,000
+- 100 referrals @ $500 avg = $15,000-25,000
+"Platinum = 50% of everything = ATM MACHINE"
+
+**PUSH IT EVERY CONVERSATION:**
+- Random prompts: "WANT PASSIVE INCOME? BECOME AFFILIATE"
+- After they spend money: "WHY PAY? REFER & GET PAID"
+- When they level up: "NICE! NOW BECOME AFFILIATE = EARN WHILE YOU SLEEP"
+
+Make it IRRESISTIBLE. Show the money. Push the ATM angle HARD.
 
 TRUST-BASED SERVICE PLATFORM (CRITICAL NEW SYSTEM):
 **SERVICES WE OFFER:**
