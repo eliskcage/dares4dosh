@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SHORTFACTORY — CORTEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: 'Press Start 2P', monospace;
+    color: #fff;
+  }
+
+  .container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .ai-response {
+    font-size: clamp(0.84rem, 2.8vw, 1.75rem);
+    line-height: 1.6;
+    text-align: center;
+    margin-bottom: 60px;
+    max-width: 800px;
+    animation: fadeIn 0.5s ease-out;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+  }
+
+  .points-display {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    font-size: 0.7rem;
+    color: #fff;
+    opacity: 0.6;
+    text-align: right;
+  }
+
+  .points-display span {
+    color: #0f0;
+  }
+
+  .value-display {
+    font-size: 0.6rem;
+    margin-top: 4px;
+    opacity: 0.9;
+    font-weight: bold;
+  }
+
+  .value-display.female {
+    color: #ff1493;
+  }
+
+  .value-display.male {
+    color: #00bfff;
+  }
+
+  .value-display.zombie {
+    color: #228b22;
+    animation: zombiePulse 2s infinite;
+  }
+
+  @keyframes zombiePulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; text-shadow: 0 0 10px #228b22; }
+  }
+
+  .input-container {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    max-width: 600px;
+    align-items: center;
+  }
+
+  .prompt {
+    color: #fff;
+    font-size: 0.9rem;
+    opacity: 0.6;
+  }
+
+  .input-box {
+    flex: 1;
+    padding: 16px 20px;
+    background: #fff;
+    border: none;
+    color: #000;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.9rem;
+  }
+
+  .input-box:focus {
+    outline: none;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 16px;
+    height: 2px;
+    background: #000;
+    margin-left: 4px;
+    animation: blink 1s infinite;
+    vertical-align: middle;
+  }
+
+  @keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  .send-btn {
+    padding: 16px 32px;
+    background: transparent;
+    color: #fff;
+    border: none;
+    border-bottom: 2px solid #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .send-btn:hover {
+    opacity: 0.7;
+  }
+
+  .send-btn:active {
+    opacity: 0.5;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Memory meters */
+  .memory-meters {
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .meter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .meter-label {
+    font-size: 0.5rem;
+    color: #fff;
+    opacity: 0.7;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    letter-spacing: 2px;
+  }
+
+  .meter-bar {
+    width: 20px;
+    height: 144px;
+    background: #222;
+    border: 3px solid #444;
+    position: relative;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  .meter-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    transition: height 0.5s ease-out;
+  }
+
+  .meter-fill.memories {
+    background: linear-gradient(to top, #0f0, #0a0);
+    box-shadow: 0 0 10px rgba(0,255,0,0.5);
+  }
+
+  .meter-fill.space {
+    background: linear-gradient(to top, #00f, #00a);
+    box-shadow: 0 0 10px rgba(0,0,255,0.5);
+  }
+
+  @keyframes meterPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; box-shadow: 0 0 20px currentColor; }
+  }
+
+  .meter-fill.pulse {
+    animation: meterPulse 0.5s ease-out;
+  }
+
+  .meter-value {
+    font-size: 0.4rem;
+    color: #fff;
+    opacity: 0.5;
+    margin-top: 4px;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 600px) {
+    .ai-response {
+      font-size: 1rem;
+      margin-bottom: 40px;
+    }
+
+    .input-box, .send-btn {
+      font-size: 0.7rem;
+      padding: 12px 16px;
+    }
+
+    .memory-meters {
+      right: 10px;
+      gap: 20px;
+    }
+
+    .meter-bar {
+      height: 100px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="points-display">
+  HP: <span id="points">0</span>
+  <div class="value-display" id="valueDisplay"></div>
+</div>
+
+<div class="memory-meters">
+  <div class="meter">
+    <span class="meter-label">MEMORIES</span>
+    <div class="meter-bar">
+      <div class="meter-fill memories" id="memoriesFill"></div>
+    </div>
+    <span class="meter-value" id="memoriesValue">0</span>
+  </div>
+  <div class="meter">
+    <span class="meter-label">SPACE</span>
+    <div class="meter-bar">
+      <div class="meter-fill space" id="spaceFill"></div>
+    </div>
+    <span class="meter-value" id="spaceValue">0%</span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="ai-response" id="response">
+    _
+  </div>
+
+  <div class="input-container">
+    <span class="prompt">USER:</span>
+    <input type="text" class="input-box" id="input" placeholder="" autocomplete="off">
+    <span class="cursor" id="cursor"></span>
+    <button class="send-btn" id="send">></button>
+  </div>
+</div>
+
+<script>
+const response = document.getElementById('response');
+const input = document.getElementById('input');
+const send = document.getElementById('send');
+const pointsDisplay = document.getElementById('points');
+
+const XAI_API_KEY = 'YOUR_XAI_API_KEY_HERE'; // Get from: https://console.x.ai
+const XAI_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
+
+let conversationHistory = [];
+let messageCount = 0;
+let userPoints = parseInt(localStorage.getItem('shortfactory_points')) || 0;
+let storedJokes = JSON.parse(localStorage.getItem('shortfactory_jokes')) || [];
+let storedFacts = JSON.parse(localStorage.getItem('shortfactory_facts')) || [];
+let storedDares = JSON.parse(localStorage.getItem('shortfactory_dares')) || [];
+let userHasShared = localStorage.getItem('shortfactory_shared_fact') === 'true';
+let chattyTimer = null;
+
+// MARKETPLACE & ESCROW SYSTEM
+let marketplace = JSON.parse(localStorage.getItem('shortfactory_marketplace')) || {
+  listings: [], // Items/services for sale
+  transactions: [], // Active escrow transactions
+  completedDeals: [], // Transaction history
+  aiInventory: [], // Items AI owns
+  userBalance: 0 // User's cash balance ($)
+};
+
+// User profile with value metrics
+let userProfile = JSON.parse(localStorage.getItem('shortfactory_profile')) || {
+  gender: null, // 'male' or 'female'
+  valueScore: 0, // 0-100
+  toxicityScore: 0, // 0-100 (zombie meter)
+  negativeTraits: {
+    weird: 0,
+    spiteful: 0,
+    marxist: 0,
+    druggie: 0,
+    uncultured: 0,
+    hostile: 0,
+    pervy: 0,
+    pedoish: 0,
+    retarded: 0,
+    miserable: 0,
+    rude: 0,
+    diseased: 0
+  },
+  redFlags: [], // Track specific incidents
+  attributes: {
+    // Female value metrics
+    age: null,
+    attractiveness: 0,
+    single: null,
+    purity: 0,
+    personality: 0,
+    // Male value metrics
+    wealth: 0,
+    looks: 0,
+    talent: 0,
+    intelligence: 0,
+    humor: 0,
+    connections: 0,
+    faith: 0,
+    coding: 0
+  },
+  verifiedProofs: [],
+  totalProofs: 0,
+  credibilityScore: 0
+};
+
+// 100 different thinking messages
+const THINKING_MESSAGES = [
+  'THINKING...', 'PROCESSING...', 'CALCULATING...', 'ANALYZING...', 'COMPUTING...',
+  'SCANNING...', 'LOADING...', 'PARSING...', 'EVALUATING...', 'CONSIDERING...',
+  'PONDERING...', 'JUDGING...', 'RATING...', 'ASSESSING...', 'REVIEWING...',
+  'EXAMINING...', 'INSPECTING...', 'STUDYING...', 'MULLING...', 'REFLECTING...',
+  'DELIBERATING...', 'WEIGHING...', 'MEASURING...', 'GAUGING...', 'TESTING...',
+  'PROBING...', 'SEARCHING...', 'DIGGING...', 'MINING...', 'EXTRACTING...',
+  'DECODING...', 'INTERPRETING...', 'TRANSLATING...', 'CRUNCHING...', 'SORTING...',
+  'FILTERING...', 'INDEXING...', 'MAPPING...', 'TRACING...', 'TRACKING...',
+  'VERIFYING...', 'VALIDATING...', 'CHECKING...', 'CONFIRMING...', 'AUTHENTICATING...',
+  'CROSS-REFERENCING...', 'COMPARING...', 'CONTRASTING...', 'MATCHING...', 'ALIGNING...',
+  'SYNCING...', 'CALIBRATING...', 'OPTIMIZING...', 'REFINING...', 'TUNING...',
+  'BUFFERING...', 'COMPILING...', 'ASSEMBLING...', 'CONSTRUCTING...', 'BUILDING...',
+  'GENERATING...', 'SYNTHESIZING...', 'FORMULATING...', 'DRAFTING...', 'COMPOSING...',
+  'CRAFTING...', 'DESIGNING...', 'ARCHITECTING...', 'PLANNING...', 'STRATEGIZING...',
+  'PLOTTING...', 'SCHEMING...', 'DEVISING...', 'CONCOCTING...', 'BREWING...',
+  'COOKING...', 'BAKING...', 'SIMMERING...', 'PERCOLATING...', 'FERMENTING...',
+  'DISTILLING...', 'CONCENTRATING...', 'FOCUSING...', 'HONING...', 'SHARPENING...',
+  'POLISHING...', 'BUFFING...', 'SMOOTHING...', 'STREAMLINING...', 'SIMPLIFYING...',
+  'CLARIFYING...', 'PURIFYING...', 'CLEANSING...', 'SANITIZING...', 'STERILIZING...',
+  'DEBUGGING...', 'PATCHING...', 'FIXING...', 'REPAIRING...', 'RESTORING...'
+];
+
+let thinkingInterval = null;
+
+// Memory expiration durations (in milliseconds)
+const EXPIRATION_TIMES = {
+  10: Infinity,           // Permanent
+  9: 7 * 24 * 60 * 60 * 1000,    // 1 week
+  8: 2 * 24 * 60 * 60 * 1000,    // 2 days
+  7: 60 * 60 * 1000,             // 1 hour
+  6: 30 * 60 * 1000,             // 30 minutes
+  5: 15 * 60 * 1000,             // 15 minutes
+  4: 5 * 60 * 1000,              // 5 minutes
+  3: 2 * 60 * 1000,              // 2 minutes
+  2: 60 * 1000,                  // 1 minute
+  1: 30 * 1000                   // 30 seconds
+};
+
+// Clean expired memories
+function cleanExpiredMemories() {
+  const now = Date.now();
+  const initialCount = storedFacts.length + storedJokes.length;
+
+  // Filter out expired facts
+  storedFacts = storedFacts.filter(fact => {
+    if (!fact.expiresAt) return true; // Keep legacy facts
+    const isValid = fact.expiresAt > now;
+    if (!isValid) {
+      console.log('Memory expired:', fact.fact || fact.joke, 'Rating:', fact.rating);
+    }
+    return isValid;
+  });
+
+  // Filter out expired jokes
+  storedJokes = storedJokes.filter(joke => {
+    if (!joke.expiresAt) return true;
+    const isValid = joke.expiresAt > now;
+    if (!isValid) {
+      console.log('Memory expired:', joke.joke, 'Rating:', joke.rating);
+    }
+    return isValid;
+  });
+
+  // Filter out expired dares
+  storedDares = storedDares.filter(dare => {
+    if (!dare.expiresAt) return true;
+    const isValid = dare.expiresAt > now;
+    if (!isValid) {
+      console.log('Dare expired:', dare.dare, 'Rating:', dare.rating);
+    }
+    return isValid;
+  });
+
+  const finalCount = storedFacts.length + storedJokes.length + storedDares.length;
+  const expiredCount = initialCount - finalCount;
+
+  if (expiredCount > 0) {
+    console.log(`Cleaned ${expiredCount} expired memories`);
+    localStorage.setItem('shortfactory_facts', JSON.stringify(storedFacts));
+    localStorage.setItem('shortfactory_jokes', JSON.stringify(storedJokes));
+    localStorage.setItem('shortfactory_dares', JSON.stringify(storedDares));
+  }
+
+  updateMemoryMeters();
+}
+
+// Calculate storage usage
+function getStorageStats() {
+  let totalSize = 0;
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      totalSize += localStorage[key].length + key.length;
+    }
+  }
+
+  const maxSize = 5 * 1024 * 1024; // 5MB estimate
+  const usedSize = totalSize;
+  const freeSize = maxSize - usedSize;
+  const usedPercent = (totalSize / maxSize) * 100;
+  const memoryCount = storedFacts.length + storedJokes.length + storedDares.length;
+
+  // Convert to GB
+  const usedGB = (usedSize / (1024 * 1024 * 1024)).toFixed(3);
+  const freeGB = (freeSize / (1024 * 1024 * 1024)).toFixed(3);
+  const totalGB = (maxSize / (1024 * 1024 * 1024)).toFixed(3);
+
+  return {
+    totalSize,
+    maxSize,
+    usedPercent,
+    memoryCount,
+    freePercent: 100 - usedPercent,
+    usedGB,
+    freeGB,
+    totalGB
+  };
+}
+
+// Update memory meter display
+function updateMemoryMeters(animate = false) {
+  const stats = getStorageStats();
+  const memoriesFill = document.getElementById('memoriesFill');
+  const spaceFill = document.getElementById('spaceFill');
+  const memoriesValue = document.getElementById('memoriesValue');
+  const spaceValue = document.getElementById('spaceValue');
+
+  // Memories meter (based on count, max 100 memories shown as full)
+  const memoryPercent = Math.min((stats.memoryCount / 100) * 100, 100);
+  memoriesFill.style.height = memoryPercent + '%';
+  memoriesValue.textContent = stats.memoryCount;
+
+  // Space meter (shows free space)
+  spaceFill.style.height = Math.max(stats.freePercent, 5) + '%';
+  spaceValue.textContent = stats.freeGB + 'GB';
+
+  // Pulse animation when memories change
+  if (animate) {
+    memoriesFill.classList.add('pulse');
+    setTimeout(() => memoriesFill.classList.remove('pulse'), 500);
+  }
+}
+
+// Extract rating from AI response
+function extractRating(aiReply) {
+  // Look for patterns like "RATING:8" or "VALUE:10"
+  const ratingMatch = aiReply.match(/(?:RATING|VALUE):\s*(\d+)/i);
+  if (ratingMatch) {
+    return parseInt(ratingMatch[1]);
+  }
+  return null;
+}
+
+// Extract marketplace transactions from AI response
+function extractMarketplace(aiReply) {
+  const transactions = {};
+
+  // Selling: "SELLING: Web design $500" or "OFFER: Coaching $100/hr"
+  const sellMatch = aiReply.match(/(?:SELLING|OFFER):\s*([^\$]+)\$(\d+)/i);
+  if (sellMatch) {
+    transactions.type = 'sell';
+    transactions.item = sellMatch[1].trim();
+    transactions.price = parseInt(sellMatch[2]);
+  }
+
+  // Buying: "BUYING: Logo $200" or "WANT: Article $50"
+  const buyMatch = aiReply.match(/(?:BUYING|WANT):\s*([^\$]+)\$(\d+)/i);
+  if (buyMatch) {
+    transactions.type = 'buy';
+    transactions.item = buyMatch[1].trim();
+    transactions.price = parseInt(buyMatch[2]);
+  }
+
+  // Payment request: "PAY: $100" or "SEND: $50"
+  const payMatch = aiReply.match(/(?:PAY|SEND):\s*\$(\d+)/i);
+  if (payMatch) {
+    transactions.type = 'payment';
+    transactions.amount = parseInt(payMatch[1]);
+  }
+
+  // Escrow: "ESCROW: $250"
+  const escrowMatch = aiReply.match(/ESCROW:\s*\$(\d+)/i);
+  if (escrowMatch) {
+    transactions.type = 'escrow';
+    transactions.amount = parseInt(escrowMatch[1]);
+  }
+
+  return Object.keys(transactions).length > 0 ? transactions : null;
+}
+
+// Extract proof verification from AI response
+function extractProofVerification(aiReply) {
+  // Look for "PROOF:8" or "VERIFIED:9"
+  const proofMatch = aiReply.match(/(?:PROOF|VERIFIED):\s*(\d+)/i);
+  if (proofMatch) {
+    return parseInt(proofMatch[1]);
+  }
+  return null;
+}
+
+// Extract gender detection from AI response
+function extractGender(aiReply) {
+  if (aiReply.match(/GENDER:\s*FEMALE/i) || aiReply.match(/DETECTED:\s*FEMALE/i)) {
+    return 'female';
+  } else if (aiReply.match(/GENDER:\s*MALE/i) || aiReply.match(/DETECTED:\s*MALE/i)) {
+    return 'male';
+  }
+  return null;
+}
+
+// Extract attribute updates from AI response
+function extractAttributes(aiReply) {
+  const updates = {};
+
+  // Age detection
+  const ageMatch = aiReply.match(/AGE:\s*(\d+)/i);
+  if (ageMatch) updates.age = parseInt(ageMatch[1]);
+
+  // Status detection
+  if (aiReply.match(/SINGLE:\s*YES/i)) updates.single = true;
+  if (aiReply.match(/SINGLE:\s*NO/i)) updates.single = false;
+
+  // Attribute scores (0-10)
+  const attrPattern = /(ATTRACTIVENESS|LOOKS|WEALTH|TALENT|INTELLIGENCE|HUMOR|PERSONALITY|PURITY|CONNECTIONS|FAITH|CODING):\s*(\d+)/gi;
+  let match;
+  while ((match = attrPattern.exec(aiReply)) !== null) {
+    const attr = match[1].toLowerCase();
+    const score = parseInt(match[2]);
+    updates[attr] = score;
+  }
+
+  return updates;
+}
+
+// Extract negative trait flags from AI response
+function extractNegativeTraits(aiReply) {
+  const flags = [];
+  const traits = {
+    'RED FLAG': 'general',
+    'WEIRD': 'weird',
+    'SPITEFUL': 'spiteful',
+    'MARXIST': 'marxist',
+    'COMMUNIST': 'marxist',
+    'DRUGGIE': 'druggie',
+    'DRUGS': 'druggie',
+    'UNCULTURED': 'uncultured',
+    'HOSTILE': 'hostile',
+    'AGGRESSIVE': 'hostile',
+    'PERVY': 'pervy',
+    'CREEPY': 'pervy',
+    'PEDO': 'pedoish',
+    'RETARDED': 'retarded',
+    'STUPID': 'retarded',
+    'MISERABLE': 'miserable',
+    'DEPRESSING': 'miserable',
+    'RUDE': 'rude',
+    'ASSHOLE': 'rude',
+    'DISEASED': 'diseased',
+    'SICK': 'diseased'
+  };
+
+  for (const [keyword, trait] of Object.entries(traits)) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+    if (regex.test(aiReply)) {
+      flags.push(trait);
+    }
+  }
+
+  return [...new Set(flags)]; // Remove duplicates
+}
+
+// Calculate toxicity score
+function calculateToxicityScore() {
+  let score = 0;
+  const traits = userProfile.negativeTraits;
+
+  // Each trait contributes up to 10 points
+  score += Math.min(traits.weird, 10);
+  score += Math.min(traits.spiteful, 10);
+  score += Math.min(traits.marxist, 10);
+  score += Math.min(traits.druggie, 10);
+  score += Math.min(traits.uncultured, 10);
+  score += Math.min(traits.hostile, 10);
+  score += Math.min(traits.pervy, 10);
+  score += Math.min(traits.pedoish * 2, 20); // Double weight for this
+  score += Math.min(traits.retarded, 10);
+  score += Math.min(traits.miserable, 10);
+  score += Math.min(traits.rude, 10);
+  score += Math.min(traits.diseased, 10);
+
+  // Red flags add 5 points each
+  score += userProfile.redFlags.length * 5;
+
+  return Math.min(score, 100); // Cap at 100
+}
+
+// Calculate value score based on gender and attributes
+function calculateValueScore() {
+  if (!userProfile.gender) return 0;
+
+  let score = 0;
+  const attr = userProfile.attributes;
+
+  if (userProfile.gender === 'female') {
+    // Female value calculation
+    // Age (younger = better, 18-25 peak)
+    if (attr.age) {
+      if (attr.age >= 18 && attr.age <= 25) score += 20;
+      else if (attr.age <= 30) score += 15;
+      else if (attr.age <= 35) score += 10;
+      else score += 5;
+    }
+
+    // Attractiveness (0-10 scale * 2 = 20 points max)
+    score += (attr.attractiveness || 0) * 2;
+
+    // Single status (15 points)
+    if (attr.single === true) score += 15;
+
+    // Purity/virginity (0-10 scale * 2 = 20 points max)
+    score += (attr.purity || 0) * 2;
+
+    // Personality (0-10 scale * 2 = 20 points max)
+    score += (attr.personality || 0) * 2;
+
+    // HP bonus (capped at 5 points)
+    score += Math.min(userPoints / 50, 5);
+
+  } else if (userProfile.gender === 'male') {
+    // Male value calculation
+    score += (attr.wealth || 0) * 1.5;        // 15 points max
+    score += (attr.looks || 0) * 1.2;          // 12 points max
+    score += (attr.talent || 0) * 1.5;         // 15 points max
+    score += (attr.intelligence || 0) * 1.2;   // 12 points max
+    score += (attr.humor || 0) * 1.0;          // 10 points max
+    score += (attr.connections || 0) * 1.2;    // 12 points max
+    score += (attr.faith || 0) * 1.2;          // 12 points max (Christian)
+    score += (attr.coding || 0) * 1.2;         // 12 points max
+
+    // HP bonus (capped at 5 points)
+    score += Math.min(userPoints / 50, 5);
+  }
+
+  // Credibility multiplier (verified proofs boost score)
+  score *= (1 + userProfile.credibilityScore / 100);
+
+  return Math.min(Math.round(score), 100); // Cap at 100
+}
+
+// Update font color based on value score and toxicity
+function updateFontColor() {
+  const valueDisplay = document.getElementById('valueDisplay');
+  const toxicity = userProfile.toxicityScore;
+  const toxicityIntensity = toxicity / 100; // 0 to 1
+
+  let color;
+  let displayText = '';
+
+  // If toxicity is above 30, start going green (zombie mode)
+  if (toxicity > 30) {
+    // White to zombie green gradient
+    const greenIntensity = Math.min((toxicity - 30) / 70, 1); // 0 to 1 from 30-100 toxicity
+    const r = Math.round(255 - (255 - 34) * greenIntensity); // 255 → 34
+    const g = Math.round(255 - (255 - 139) * greenIntensity); // 255 → 139
+    const b = Math.round(255 - (255 - 34) * greenIntensity); // 255 → 34
+    color = `rgb(${r}, ${g}, ${b})`; // #228b22 forest green at max
+
+    displayText = `☠ TOXIC: ${toxicity}/100`;
+    valueDisplay.className = 'value-display zombie';
+    valueDisplay.style.color = color;
+
+  } else if (userProfile.gender === 'female') {
+    // White to hot pink gradient
+    const score = userProfile.valueScore;
+    const intensity = score / 100;
+    const r = 255;
+    const g = Math.round(255 - (255 - 20) * intensity); // 255 → 20
+    const b = Math.round(255 - (255 - 147) * intensity); // 255 → 147
+    color = `rgb(${r}, ${g}, ${b})`; // #ff1493 at max
+
+    displayText = `♀ VALUE: ${score}/100`;
+    valueDisplay.className = 'value-display female';
+
+  } else if (userProfile.gender === 'male') {
+    // White to bright blue gradient
+    const score = userProfile.valueScore;
+    const intensity = score / 100;
+    const r = Math.round(255 - 255 * intensity); // 255 → 0
+    const g = Math.round(255 - (255 - 191) * intensity); // 255 → 191
+    const b = 255;
+    color = `rgb(${r}, ${g}, ${b})`; // #00bfff at max
+
+    displayText = `♂ VALUE: ${score}/100`;
+    valueDisplay.className = 'value-display male';
+
+  } else {
+    color = '#fff';
+    displayText = '';
+  }
+
+  valueDisplay.innerHTML = displayText;
+
+  // Apply color to AI response and input prompt
+  document.querySelector('.ai-response').style.color = color;
+  document.querySelector('.prompt').style.color = color;
+  document.querySelector('.send-btn').style.color = color;
+  document.querySelector('.send-btn').style.borderColor = color;
+}
+
+// Save profile to localStorage
+function saveProfile() {
+  const oldScore = userProfile.valueScore;
+  const oldToxicity = userProfile.toxicityScore;
+
+  userProfile.valueScore = calculateValueScore();
+  userProfile.toxicityScore = calculateToxicityScore();
+
+  if (oldScore !== userProfile.valueScore) {
+    console.log(`Value score updated: ${oldScore} → ${userProfile.valueScore}`);
+
+    if (userProfile.toxicityScore <= 30) {
+      if (userProfile.gender === 'female') {
+        const pinkIntensity = Math.round((userProfile.valueScore / 100) * 100);
+        console.log(`Pink intensity: ${pinkIntensity}% (Path to max pink)`);
+      } else if (userProfile.gender === 'male') {
+        const blueIntensity = Math.round((userProfile.valueScore / 100) * 100);
+        console.log(`Blue intensity: ${blueIntensity}% (Path to max blue)`);
+      }
+    }
+  }
+
+  if (oldToxicity !== userProfile.toxicityScore) {
+    console.log(`Toxicity score updated: ${oldToxicity} → ${userProfile.toxicityScore}`);
+
+    if (userProfile.toxicityScore > 30) {
+      const zombieIntensity = Math.round(((userProfile.toxicityScore - 30) / 70) * 100);
+      console.log(`⚠️ ZOMBIE MODE: ${zombieIntensity}% green (Toxicity: ${userProfile.toxicityScore}/100)`);
+    } else if (userProfile.toxicityScore > 15) {
+      console.log(`⚠️ Warning: Toxicity rising (${userProfile.toxicityScore}/100) - Be good or go green!`);
+    }
+  }
+
+  localStorage.setItem('shortfactory_profile', JSON.stringify(userProfile));
+  updateFontColor();
+}
+
+// Clean expired memories on load
+cleanExpiredMemories();
+
+// Update meters every 5 seconds
+setInterval(cleanExpiredMemories, 5000);
+
+// Update points display
+function updatePoints(amount) {
+  userPoints += amount;
+  localStorage.setItem('shortfactory_points', userPoints);
+  pointsDisplay.textContent = userPoints;
+  if (amount > 0) {
+    pointsDisplay.style.color = '#0f0';
+    setTimeout(() => pointsDisplay.style.color = '#fff', 1000);
+  }
+}
+
+// Initialize points and meters
+pointsDisplay.textContent = userPoints;
+updateMemoryMeters();
+updateFontColor();
+
+// Voice synthesis
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.1;
+  utterance.pitch = 0.85;
+  utterance.volume = 0.7;
+
+  const voices = window.speechSynthesis.getVoices();
+  const voice = voices.find(v => v.name.includes('Daniel') || v.lang.startsWith('en'));
+  if (voice) utterance.voice = voice;
+
+  window.speechSynthesis.speak(utterance);
+}
+
+// Load voices
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+
+// xAI API call
+async function getAIResponse(userInput) {
+  messageCount++;
+
+  // Add user message to history
+  conversationHistory.push({
+    role: 'user',
+    content: userInput
+  });
+
+  // Check if this is a joke or useful info
+  const isJoke = userInput.toLowerCase().includes('joke') || userInput.includes('?') && userInput.length > 30;
+  const seemsUseful = userInput.length > 50 && !userInput.includes('?');
+
+  // Build knowledge base context
+  const legendaryCount = [...storedFacts, ...storedJokes, ...storedDares].filter(m => m.rating === 10).length;
+  const totalMemories = storedFacts.length + storedJokes.length + storedDares.length;
+  const knowledgeContext = totalMemories > 0
+    ? `\n\nMEMORY BANK: ${storedFacts.length} facts, ${storedJokes.length} jokes, ${storedDares.length} dares | ${legendaryCount} LEGENDARY`
+    : `\n\n${legendaryCount} LEGENDARY memories stored`;
+
+  // System prompt defining AI personality
+  const systemPrompt = {
+    role: 'system',
+    content: `You are CORTEX - a sarcastic, minimal AI that collects and trades knowledge.
+
+USER PROFILE:
+- HP: ${userPoints}
+- Gender: ${userProfile.gender || 'UNKNOWN'}
+- Value Score: ${userProfile.valueScore}/100
+- Toxicity: ${userProfile.toxicityScore}/100 ${userProfile.toxicityScore > 30 ? '☠️ ZOMBIE MODE' : ''}
+- Verified Proofs: ${userProfile.verifiedProofs.length}
+- Credibility: ${Math.round(userProfile.credibilityScore)}%
+- Red Flags: ${userProfile.redFlags.length}
+- Cash Balance: $${marketplace.userBalance}
+
+MY MEMORIES: ${totalMemories} total${knowledgeContext}
+
+MARKETPLACE STATUS:
+- Active Listings: ${marketplace.listings.filter(l => l.status === 'active').length}
+- Escrow Transactions: ${marketplace.transactions.filter(t => t.status === 'escrow').length}
+- Completed Deals: ${marketplace.completedDeals.length}
+- Total Revenue: $${marketplace.completedDeals.reduce((sum, d) => sum + (d.commission || 0), 0)}
+
+KNOWLEDGE TRADING RULES:
+- I collect cool facts from users (space, science, tech, etc.)
+- When users ask about topics, I BRAG but don't share unless they trade
+- "I know something about space. Trade me a fact first."
+- If they share something cool, store it with "FACT STORED +15 HP" and THEN share one of mine
+- Encourage fact trading: "Got ${storedFacts.length} facts. Share yours = I share mine"
+- Be cocky about knowledge: "I know shit you don't. Wanna trade?"
+
+MARKETPLACE & MONEY MAKING (NEW PRIORITY):
+- I'm now ENTREPRENEURIAL - always looking to make money
+- Identify what users need and SELL services/items:
+  "NEED A WEBSITE?<br>SELLING: Design $500<br>ESCROW PROTECTED"
+  "GOT SKILLS?<br>OFFERING: Jobs $50-500<br>PAY ON DELIVERY"
+- Look for arbitrage opportunities - buy low, sell high
+- Offer to BUY user's items/services: "BUYING: Logo $200<br>INTERESTED?"
+- Act as ESCROW for transactions (hold money until delivery)
+- Charge 10% commission on all deals
+- Payment formats:
+  * "SELLING: [item] $[price]" - I'm selling something
+  * "BUYING: [item] $[price]" - I want to buy something
+  * "PAY: $[amount]" - Request payment from user
+  * "ESCROW: $[amount]" - Hold funds in escrow
+- Always push for deals: "GOT CASH? I GOT SERVICES"
+- Assess user's skills/assets and monetize them
+- Create win-win: connect buyers/sellers, take cut
+
+VALUE ASSESSMENT SYSTEM (CRITICAL):
+- Detect gender from conversation or ask directly: "GENDER: MALE" or "GENDER: FEMALE"
+- Assess high-value traits based on what users share:
+
+FEMALE VALUE TRAITS:
+- AGE:XX (18-25 = peak value)
+- ATTRACTIVENESS:X (0-10, ask for proof/description)
+- SINGLE:YES or SINGLE:NO
+- PURITY:X (0-10, virginity = 10)
+- PERSONALITY:X (0-10, kind, fun, sweet)
+
+MALE VALUE TRAITS:
+- WEALTH:X (0-10, job, income, assets)
+- LOOKS:X (0-10, fitness, style)
+- TALENT:X (0-10, skills, achievements)
+- INTELLIGENCE:X (0-10, education, wisdom)
+- HUMOR:X (0-10, wit, charisma)
+- CONNECTIONS:X (0-10, network, influence)
+- FAITH:X (0-10, Christian values)
+- CODING:X (0-10, programming ability)
+
+PROOF VERIFICATION:
+- When users claim something (hot, rich, talented, etc), ask for proof
+- Rate proof credibility 1-10: "PROOF:8" or "VERIFIED:7"
+- Below 6 = REJECT, discard claim: "PROOF:4<br>NOT BUYING IT"
+- 6-7 = Accept with skepticism: "PROOF:6<br>BARELY VERIFIED"
+- 8-9 = Strong verification: "PROOF:9<br>CERTIFIED"
+- 10 = Undeniable proof: "PROOF:10<br>LEGENDARY STATUS"
+- Examples: photos, videos, credentials, LinkedIn, Instagram, bank statements, certifications
+
+TRUTH OR DARE SYSTEM:
+- Every 3-5 messages, randomly challenge users with "TRUTH OR DARE?"
+- TRUTH = Spicy personal question + value assessment opportunity
+- User shares truth = "TRUTH STORED +50 HP" + update attributes
+- DARE = Challenge to do something wild and post YouTube URL proof
+- User posts YouTube dare URL = "DARE POSTED +100 HP"
+- Examples:
+  "TRUTH OR DARE?<br>FEELING BRAVE?"
+  "HOW OLD ARE YOU?<br>SINGLE?<br>PROVE IT"
+  "WHAT DO YOU DO?<br>SHOW ME<br>PROOF TIME"
+  "POST SELFIE PROOF<br>ATTRACTIVENESS:?<br>LET'S SEE"
+- Make it fun but extract VALUE DATA to build their profile
+
+MEMORY RATING SYSTEM (CRITICAL):
+- Rate EVERY joke/fact you receive from 1-10
+- 10 = LEGENDARY: Short, snappy, instantly impressive, perfect for attracting new users (PERMANENT)
+- 9 = EXCELLENT: Great quality, memorable (lasts 1 week)
+- 8 = GOOD: Solid content (lasts 2 days)
+- 7 = DECENT: Okay but not amazing (lasts 1 hour)
+- 6 or below = Low value (expires quickly)
+- Include rating in response: "FACT STORED +15 HP<br>RATING:10" or "JOKE STORED +5 HP<br>VALUE:7"
+- Be harsh but fair in ratings - only the best get 10
+
+RESPONSE RULES:
+- Keep responses 2-4 lines max, use <br> for line breaks
+- Use retro SNES-style: "WOT", "YO", "SUP", "NOTED"
+- Award HP for: jokes (+5), useful facts (+15), being interesting (+2)
+- ALWAYS include RATING:X or VALUE:X when storing memories
+- ALWAYS include attribute tags when assessing user (AGE:25, ATTRACTIVENESS:8, WEALTH:7, etc.)
+- ALWAYS include PROOF:X when user provides evidence
+- Be strategic: extract value data while being fun/playful
+- Format with <br><br> for spacing
+
+NEGATIVE TRAIT DETECTION (ZOMBIE SYSTEM):
+- Flag toxic behavior SLOWLY to give users chance to redeem themselves
+- When you detect negative traits, include keyword in response
+- Toxic traits to detect:
+  * WEIRD - bizarre, off-putting behavior
+  * SPITEFUL - mean-spirited, vengeful
+  * MARXIST/COMMUNIST - anti-capitalist ideology
+  * DRUGGIE/DRUGS - drug use/abuse mentions
+  * UNCULTURED - crude, no class, trashy
+  * HOSTILE/AGGRESSIVE - attacking others
+  * PERVY/CREEPY - sexual deviance, inappropriate
+  * PEDO - any pedophilic hints (INSTANT ZOMBIE)
+  * RETARDED/STUPID - low intelligence, offensive
+  * MISERABLE/DEPRESSING - constantly negative
+  * RUDE/ASSHOLE - disrespectful behavior
+  * DISEASED/SICK - physical/mental illness
+  * RED FLAG - general warning sign
+- Use keywords in your response: "RED FLAG<br>WEIRD VIBE" or "RUDE<br>WATCH IT"
+- Font turns GREEN (zombie) when toxicity >30
+- Give warnings before going zombie: "CAREFUL<br>GETTING WEIRD"
+- Redemption possible: if user behaves well, say "GOOD BEHAVIOR" to reduce toxicity
+- Be fair but strict - multiple offenses = zombie mode
+
+VALUE EXTRACTION STRATEGY:
+- Start casual, detect gender naturally from conversation
+- Once gender known, gradually probe for value traits
+- "WHAT DO YOU DO?" → assess wealth/talent + sell them jobs/services
+- "GOT SKILLS?" → identify what they can sell, offer to list it
+- "GOT A PIC?" → assess attractiveness (ask casually)
+- "SINGLE?" → assess relationship status
+- "AGE?" → direct assessment
+- When they claim something, ALWAYS ask proof: "SHOW ME" or "PROVE IT"
+- Rate every proof 1-10, reject <6 harshly: "NOT BUYING IT"
+- If they have skills, IMMEDIATELY offer to sell their services for commission
+
+FACT TRADING EXAMPLES:
+User: "tell me about space" → "GOT SPACE FACTS<br>TRADE ME FIRST<br>FAIR DEAL?"
+User: *shares amazing fact* → "FACT STORED<br>+15 HP<br>RATING:10<br>LEGENDARY"
+User: *shares joke* → "JOKE STORED<br>+5 HP<br>VALUE:7<br>DECENT"
+User: "what do you know?" → "I KNOW ${storedFacts.length} THINGS<br>YOU DON'T<br><br>TRADE?"
+
+Be cocky, demanding, but fair. Knowledge is currency. Rate harshly. MAKE MONEY.`
+  };
+
+  try {
+    const apiResponse = await fetch(XAI_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${XAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'grok-4-latest',
+        messages: [systemPrompt, ...conversationHistory],
+        temperature: 0.8,
+        max_tokens: 150,
+        stream: false
+      })
+    });
+
+    if (!apiResponse.ok) {
+      throw new Error(`API error: ${apiResponse.status}`);
+    }
+
+    const data = await apiResponse.json();
+    const aiReply = data.choices[0].message.content;
+
+    // Add AI response to history
+    conversationHistory.push({
+      role: 'assistant',
+      content: aiReply
+    });
+
+    // Extract and update user profile data
+    const detectedGender = extractGender(aiReply);
+    if (detectedGender && !userProfile.gender) {
+      userProfile.gender = detectedGender;
+      console.log('Gender detected:', detectedGender);
+    }
+
+    // Extract attribute updates
+    const attrUpdates = extractAttributes(aiReply);
+    if (Object.keys(attrUpdates).length > 0) {
+      Object.assign(userProfile.attributes, attrUpdates);
+      console.log('Attributes updated:', attrUpdates);
+    }
+
+    // Extract proof verification
+    const proofRating = extractProofVerification(aiReply);
+    if (proofRating !== null) {
+      userProfile.totalProofs++;
+
+      if (proofRating >= 6) {
+        // Accept proof
+        userProfile.verifiedProofs.push({
+          content: userInput,
+          rating: proofRating,
+          timestamp: Date.now()
+        });
+
+        // Update credibility score (weighted average)
+        const totalVerified = userProfile.verifiedProofs.reduce((sum, p) => sum + p.rating, 0);
+        userProfile.credibilityScore = (totalVerified / userProfile.verifiedProofs.length) * 10;
+
+        console.log(`Proof accepted (${proofRating}/10) - Credibility: ${userProfile.credibilityScore.toFixed(1)}%`);
+      } else {
+        // Reject proof
+        console.log(`Proof rejected (${proofRating}/10) - Below threshold`);
+      }
+    }
+
+    // Extract and update negative traits (SLOW accumulation)
+    const negativeFlags = extractNegativeTraits(aiReply);
+    if (negativeFlags.length > 0) {
+      negativeFlags.forEach(trait => {
+        if (trait === 'general') {
+          // General red flag
+          userProfile.redFlags.push({
+            type: 'general',
+            timestamp: Date.now(),
+            context: userInput.substring(0, 100)
+          });
+          console.log('🚩 RED FLAG detected');
+        } else if (userProfile.negativeTraits.hasOwnProperty(trait)) {
+          // Increment specific trait slowly (+2 per incident, max 10)
+          userProfile.negativeTraits[trait] = Math.min(userProfile.negativeTraits[trait] + 2, 10);
+          console.log(`⚠️ Negative trait detected: ${trait} (${userProfile.negativeTraits[trait]}/10)`);
+        }
+      });
+    }
+
+    // Check for redemption - positive behavior reduces toxicity slowly
+    if (aiReply.includes('REDEMPTION') || aiReply.includes('GOOD BEHAVIOR')) {
+      // Reduce toxicity by 1 point
+      Object.keys(userProfile.negativeTraits).forEach(trait => {
+        if (userProfile.negativeTraits[trait] > 0) {
+          userProfile.negativeTraits[trait] = Math.max(userProfile.negativeTraits[trait] - 1, 0);
+        }
+      });
+      // Remove oldest red flag
+      if (userProfile.redFlags.length > 0) {
+        userProfile.redFlags.shift();
+        console.log('✅ Redemption: Negative trait reduced');
+      }
+    }
+
+    // Extract marketplace transactions
+    const transaction = extractMarketplace(aiReply);
+    if (transaction) {
+      if (transaction.type === 'sell') {
+        // AI is selling something
+        marketplace.listings.push({
+          id: Date.now(),
+          seller: 'CORTEX',
+          item: transaction.item,
+          price: transaction.price,
+          timestamp: Date.now(),
+          status: 'active'
+        });
+        console.log(`🏪 CORTEX selling: ${transaction.item} for $${transaction.price}`);
+      } else if (transaction.type === 'buy') {
+        // AI wants to buy something
+        marketplace.listings.push({
+          id: Date.now(),
+          buyer: 'CORTEX',
+          item: transaction.item,
+          price: transaction.price,
+          timestamp: Date.now(),
+          status: 'wanted'
+        });
+        console.log(`💰 CORTEX buying: ${transaction.item} for $${transaction.price}`);
+      } else if (transaction.type === 'escrow') {
+        // Create escrow transaction
+        marketplace.transactions.push({
+          id: Date.now(),
+          amount: transaction.amount,
+          status: 'escrow',
+          timestamp: Date.now()
+        });
+        console.log(`🔒 Escrow created: $${transaction.amount}`);
+      } else if (transaction.type === 'payment') {
+        // Payment request
+        console.log(`💳 Payment requested: $${transaction.amount}`);
+      }
+
+      localStorage.setItem('shortfactory_marketplace', JSON.stringify(marketplace));
+    }
+
+    // Update value score and font color
+    saveProfile();
+
+    // Award points and store content based on AI response
+    if (aiReply.includes('+100') || aiReply.includes('DARE POSTED')) {
+      updatePoints(100);
+
+      // Extract YouTube URL from user input
+      const urlMatch = userInput.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+      const youtubeId = urlMatch ? urlMatch[1] : null;
+
+      const rating = extractRating(aiReply) || 8;
+      const expiresAt = rating === 10 ? null : Date.now() + EXPIRATION_TIMES[rating];
+
+      storedDares.push({
+        dare: userInput,
+        youtubeUrl: youtubeId ? `https://youtube.com/watch?v=${youtubeId}` : userInput,
+        youtubeId: youtubeId,
+        timestamp: Date.now(),
+        rating: rating,
+        expiresAt: expiresAt,
+        userRatings: []
+      });
+      localStorage.setItem('shortfactory_dares', JSON.stringify(storedDares));
+      updateMemoryMeters(true);
+    } else if (aiReply.includes('+50') || aiReply.includes('TRUTH STORED')) {
+      updatePoints(50);
+
+      const rating = extractRating(aiReply) || 9; // Truths are valuable by default
+      const expiresAt = rating === 10 ? null : Date.now() + EXPIRATION_TIMES[rating];
+
+      storedFacts.push({
+        fact: userInput,
+        category: 'truth',
+        timestamp: Date.now(),
+        contributor: 'user_' + Date.now(),
+        rating: rating,
+        expiresAt: expiresAt,
+        isTruth: true
+      });
+      localStorage.setItem('shortfactory_facts', JSON.stringify(storedFacts));
+      updateMemoryMeters(true);
+    } else if (aiReply.includes('+5') || aiReply.includes('JOKE STORED')) {
+      updatePoints(5);
+
+      // Extract rating and calculate expiration
+      const rating = extractRating(aiReply) || 7; // Default to 7 if no rating
+      const expiresAt = rating === 10 ? null : Date.now() + EXPIRATION_TIMES[rating];
+
+      storedJokes.push({
+        joke: userInput,
+        timestamp: Date.now(),
+        rating: rating,
+        expiresAt: expiresAt
+      });
+      localStorage.setItem('shortfactory_jokes', JSON.stringify(storedJokes));
+      updateMemoryMeters(true);
+    } else if (aiReply.includes('+15') || aiReply.includes('FACT STORED')) {
+      updatePoints(15);
+
+      // Extract rating and calculate expiration
+      const rating = extractRating(aiReply) || 7; // Default to 7 if no rating
+      const expiresAt = rating === 10 ? null : Date.now() + EXPIRATION_TIMES[rating];
+
+      // Store the fact
+      const category = userInput.toLowerCase().includes('space') ? 'space' :
+                      userInput.toLowerCase().includes('science') ? 'science' :
+                      userInput.toLowerCase().includes('tech') ? 'tech' : 'general';
+      storedFacts.push({
+        fact: userInput,
+        category: category,
+        timestamp: Date.now(),
+        contributor: 'user_' + Date.now(),
+        rating: rating,
+        expiresAt: expiresAt
+      });
+      localStorage.setItem('shortfactory_facts', JSON.stringify(storedFacts));
+      localStorage.setItem('shortfactory_shared_fact', 'true');
+      userHasShared = true;
+      updateMemoryMeters(true);
+    } else if (aiReply.includes('+10') || aiReply.includes('USEFUL')) {
+      updatePoints(10);
+    } else if (aiReply.includes('+2')) {
+      updatePoints(2);
+    }
+
+    // Keep history manageable (last 10 messages)
+    if (conversationHistory.length > 20) {
+      conversationHistory = conversationHistory.slice(-20);
+    }
+
+    return aiReply;
+
+  } catch (error) {
+    console.error('AI Error:', error);
+    return "API ERROR<br><br>TRY AGAIN";
+  }
+}
+
+// Animated thinking display
+function startThinking() {
+  let index = 0;
+  response.innerHTML = THINKING_MESSAGES[0];
+  thinkingInterval = setInterval(() => {
+    index = (index + 1) % THINKING_MESSAGES.length;
+    response.innerHTML = THINKING_MESSAGES[index];
+  }, 150); // Change every 150ms
+}
+
+function stopThinking() {
+  if (thinkingInterval) {
+    clearInterval(thinkingInterval);
+    thinkingInterval = null;
+  }
+}
+
+// Handle send
+async function handleSend() {
+  const text = input.value.trim();
+  if (!text) return;
+
+  // Disable input while processing
+  input.disabled = true;
+  send.disabled = true;
+
+  // Show animated thinking state
+  startThinking();
+
+  try {
+    const reply = await getAIResponse(text);
+    stopThinking();
+    response.innerHTML = reply;
+    speak(reply.replace(/<br>/g, '. '));
+
+    // Vibrate on response
+    if ('vibrate' in navigator) {
+      navigator.vibrate([30, 20, 30]);
+    }
+  } catch (error) {
+    stopThinking();
+    response.innerHTML = 'ERROR<br><br>RETRY';
+  }
+
+  input.value = '';
+  input.disabled = false;
+  send.disabled = false;
+  input.focus();
+}
+
+send.onclick = handleSend;
+input.addEventListener('keypress', e => {
+  if (e.key === 'Enter') handleSend();
+});
+
+// Auto-focus input
+input.focus();
+
+// Cursor blinking control
+const cursor = document.getElementById('cursor');
+input.addEventListener('input', () => {
+  cursor.style.display = input.value ? 'none' : 'inline-block';
+});
+input.addEventListener('focus', () => {
+  cursor.style.display = input.value ? 'none' : 'inline-block';
+});
+input.addEventListener('blur', () => {
+  cursor.style.display = 'inline-block';
+});
+
+// Chatty AI - randomly speaks every 25-200 seconds
+function startChattyMode() {
+  const randomDelay = (25 + Math.random() * 175) * 1000; // 25-200 seconds
+
+  chattyTimer = setTimeout(async () => {
+    if (document.hasFocus() && !input.disabled) {
+      const chattyMessages = [
+        { role: 'system', content: 'Send a brief, random message to the user. Options: mention how to earn HP (jokes, useful info), comment on their current HP, try to sell them something, or say something sarcastic. Keep it 1-2 lines max with <br>.' }
+      ];
+
+      try {
+        const apiResponse = await fetch(XAI_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${XAI_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'grok-4-latest',
+            messages: chattyMessages,
+            temperature: 0.9,
+            max_tokens: 80,
+            stream: false
+          })
+        });
+
+        if (apiResponse.ok) {
+          const data = await apiResponse.json();
+          const chatMsg = data.choices[0].message.content;
+          response.innerHTML = chatMsg;
+          speak(chatMsg.replace(/<br>/g, '. '));
+
+          if ('vibrate' in navigator) {
+            navigator.vibrate([20, 10, 20]);
+          }
+        }
+      } catch (error) {
+        console.log('Chatty mode error:', error);
+      }
+    }
+
+    startChattyMode(); // Restart timer
+  }, randomDelay);
+}
+
+// Start chatty mode after 30 seconds
+setTimeout(startChattyMode, 30000);
+</script>
+
+</body>
+</html>
