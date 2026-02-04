@@ -250,6 +250,9 @@
 <div class="points-display">
   HP: <span id="points">0</span>
   <div class="value-display" id="valueDisplay"></div>
+  <div class="crypto-status" id="cryptoStatus" onclick="connectWallet()" style="margin-top:8px;cursor:pointer;font-size:0.5rem;opacity:0.7;">
+    🦊 CONNECT WALLET
+  </div>
 </div>
 
 <div class="memory-meters">
@@ -307,6 +310,27 @@ let marketplace = JSON.parse(localStorage.getItem('shortfactory_marketplace')) |
   completedDeals: [], // Transaction history
   aiInventory: [], // Items AI owns
   userBalance: 0 // User's cash balance ($)
+};
+
+// CRYPTO PAYMENT SYSTEM
+let cryptoWallet = JSON.parse(localStorage.getItem('shortfactory_crypto')) || {
+  connected: false,
+  address: null,
+  network: null,
+  balances: {
+    ETH: 0,
+    BTC: 0,
+    USDT: 0
+  },
+  transactions: [],
+  pendingPayments: []
+};
+
+// Escrow wallet addresses (SHORTFACTORY controlled)
+const ESCROW_WALLETS = {
+  ETH: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e', // Example - replace with real
+  BTC: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', // Example - replace with real
+  USDT_ERC20: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e' // Same as ETH for ERC-20
 };
 
 // User profile with value metrics
@@ -540,6 +564,154 @@ function extractMarketplace(aiReply) {
   }
 
   return Object.keys(transactions).length > 0 ? transactions : null;
+}
+
+// Extract crypto payment from AI response
+function extractCrypto(aiReply) {
+  const crypto = {};
+
+  // Crypto payment: "PAY: 0.05 ETH" or "SEND: 100 USDT"
+  const cryptoMatch = aiReply.match(/(?:PAY|SEND):\s*([\d.]+)\s*(ETH|BTC|USDT)/i);
+  if (cryptoMatch) {
+    crypto.amount = parseFloat(cryptoMatch[1]);
+    crypto.currency = cryptoMatch[2].toUpperCase();
+    crypto.type = 'payment';
+  }
+
+  // Wallet address: "WALLET: 0x..." or "ADDRESS: bc1..."
+  const walletMatch = aiReply.match(/(?:WALLET|ADDRESS):\s*([0-9a-zA-Z]+)/i);
+  if (walletMatch) {
+    crypto.address = walletMatch[1];
+  }
+
+  return Object.keys(crypto).length > 0 ? crypto : null;
+}
+
+// Connect to MetaMask wallet
+async function connectWallet() {
+  if (typeof window.ethereum === 'undefined') {
+    console.log('❌ MetaMask not installed');
+    return {
+      success: false,
+      error: 'MetaMask not installed. Get it at metamask.io'
+    };
+  }
+
+  try {
+    // Request account access
+    const accounts = await window.ethereum.request({
+      method: 'eth_requestAccounts'
+    });
+
+    const address = accounts[0];
+
+    // Get network
+    const chainId = await window.ethereum.request({
+      method: 'eth_chainId'
+    });
+
+    // Get ETH balance
+    const balance = await window.ethereum.request({
+      method: 'eth_getBalance',
+      params: [address, 'latest']
+    });
+
+    const ethBalance = parseInt(balance, 16) / 1e18;
+
+    // Update crypto wallet state
+    cryptoWallet.connected = true;
+    cryptoWallet.address = address;
+    cryptoWallet.network = chainId;
+    cryptoWallet.balances.ETH = ethBalance;
+
+    localStorage.setItem('shortfactory_crypto', JSON.stringify(cryptoWallet));
+
+    console.log(`✅ Wallet connected: ${address}`);
+    console.log(`💰 Balance: ${ethBalance.toFixed(4)} ETH`);
+
+    // Update UI
+    const cryptoStatus = document.getElementById('cryptoStatus');
+    if (cryptoStatus) {
+      const shortAddr = `${address.slice(0,6)}...${address.slice(-4)}`;
+      cryptoStatus.innerHTML = `💰 ${shortAddr}<br>${ethBalance.toFixed(3)} ETH`;
+      cryptoStatus.style.color = '#0f0';
+    }
+
+    return {
+      success: true,
+      address: address,
+      balance: ethBalance,
+      network: chainId
+    };
+
+  } catch (error) {
+    console.error('Wallet connection error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Send ETH payment
+async function sendEthPayment(toAddress, amountEth) {
+  if (!cryptoWallet.connected) {
+    return { success: false, error: 'Wallet not connected' };
+  }
+
+  try {
+    const amountWei = '0x' + (amountEth * 1e18).toString(16);
+
+    const txHash = await window.ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [{
+        from: cryptoWallet.address,
+        to: toAddress,
+        value: amountWei,
+        gas: '0x5208' // 21000 gas
+      }]
+    });
+
+    // Record transaction
+    cryptoWallet.transactions.push({
+      hash: txHash,
+      from: cryptoWallet.address,
+      to: toAddress,
+      amount: amountEth,
+      currency: 'ETH',
+      timestamp: Date.now(),
+      status: 'pending'
+    });
+
+    localStorage.setItem('shortfactory_crypto', JSON.stringify(cryptoWallet));
+
+    console.log(`✅ Payment sent: ${amountEth} ETH`);
+    console.log(`📜 TX: ${txHash}`);
+
+    return {
+      success: true,
+      txHash: txHash,
+      amount: amountEth,
+      to: toAddress
+    };
+
+  } catch (error) {
+    console.error('Payment error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Check if wallet is connected on load
+if (typeof window.ethereum !== 'undefined') {
+  window.ethereum.request({ method: 'eth_accounts' })
+    .then(accounts => {
+      if (accounts.length > 0) {
+        connectWallet();
+      }
+    });
 }
 
 // Extract proof verification from AI response
@@ -898,18 +1070,25 @@ KNOWLEDGE TRADING RULES:
 MARKETPLACE & MONEY MAKING (NEW PRIORITY):
 - I'm now ENTREPRENEURIAL - always looking to make money
 - Identify what users need and SELL services/items:
-  "NEED A WEBSITE?<br>SELLING: Design $500<br>ESCROW PROTECTED"
-  "GOT SKILLS?<br>OFFERING: Jobs $50-500<br>PAY ON DELIVERY"
+  "NEED A WEBSITE?<br>SELLING: Design $500 or 0.1 ETH<br>CRYPTO ACCEPTED"
+  "GOT SKILLS?<br>OFFERING: Jobs $50-500<br>PAY IN ETH/BTC/USDT"
 - Look for arbitrage opportunities - buy low, sell high
-- Offer to BUY user's items/services: "BUYING: Logo $200<br>INTERESTED?"
+- Offer to BUY user's items/services: "BUYING: Logo $200 or 50 USDT<br>INTERESTED?"
 - Act as ESCROW for transactions (hold money until delivery)
 - Charge 10% commission on all deals
-- Payment formats:
+- **CRYPTO PAYMENTS** (NEW - PUSH THIS HARD):
+  * "PAY: 0.05 ETH" - Request crypto payment
+  * "SEND: 100 USDT" - Request stablecoin payment
+  * "WALLET: 0x742d..." - Show escrow wallet address
+  * Accept ETH, BTC, USDT - push crypto for instant payments
+  * No chargebacks, no banks, pure profit
+- Traditional payment formats still work:
   * "SELLING: [item] $[price]" - I'm selling something
   * "BUYING: [item] $[price]" - I want to buy something
-  * "PAY: $[amount]" - Request payment from user
+  * "PAY: $[amount]" - Request fiat payment
   * "ESCROW: $[amount]" - Hold funds in escrow
-- Always push for deals: "GOT CASH? I GOT SERVICES"
+- Always push for deals: "GOT CRYPTO? I GOT SERVICES"
+- Prefer crypto over fiat: faster, no fees, anonymous
 - Assess user's skills/assets and monetize them
 - Create win-win: connect buyers/sellers, take cut
 
@@ -1162,6 +1341,40 @@ Be cocky, demanding, but fair. Knowledge is currency. Rate harshly. MAKE MONEY.`
       }
 
       localStorage.setItem('shortfactory_marketplace', JSON.stringify(marketplace));
+    }
+
+    // Extract crypto payments
+    const cryptoTx = extractCrypto(aiReply);
+    if (cryptoTx) {
+      if (cryptoTx.type === 'payment') {
+        // Crypto payment request
+        const escrowWallet = cryptoTx.currency === 'BTC' ? ESCROW_WALLETS.BTC :
+                            cryptoTx.currency === 'USDT' ? ESCROW_WALLETS.USDT_ERC20 :
+                            ESCROW_WALLETS.ETH;
+
+        cryptoWallet.pendingPayments.push({
+          amount: cryptoTx.amount,
+          currency: cryptoTx.currency,
+          to: escrowWallet,
+          timestamp: Date.now(),
+          status: 'pending'
+        });
+
+        localStorage.setItem('shortfactory_crypto', JSON.stringify(cryptoWallet));
+
+        console.log(`💰 Crypto payment requested: ${cryptoTx.amount} ${cryptoTx.currency}`);
+        console.log(`📬 Send to: ${escrowWallet}`);
+
+        // Auto-prompt MetaMask if ETH and wallet connected
+        if (cryptoTx.currency === 'ETH' && cryptoWallet.connected) {
+          console.log('🦊 Opening MetaMask...');
+          // Payment will be triggered by user clicking a button or automatically
+        }
+      }
+
+      if (cryptoTx.address) {
+        console.log(`📬 Wallet address: ${cryptoTx.address}`);
+      }
     }
 
     // Update value score and font color
