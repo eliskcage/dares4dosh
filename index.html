@@ -723,7 +723,11 @@ async function connectWallet() {
   const cryptoStatus = document.getElementById('cryptoStatus');
 
   if (typeof window.ethereum === 'undefined') {
-    alert('❌ MetaMask not installed!\n\nGet it at: https://metamask.io');
+    if (cryptoStatus) {
+      cryptoStatus.innerHTML = '❌ <a href="https://metamask.io" target="_blank" style="color:#f0f;text-decoration:underline;">GET METAMASK</a>';
+      cryptoStatus.style.color = '#f00';
+      cryptoStatus.onclick = null;
+    }
     return {
       success: false,
       error: 'MetaMask not installed. Get it at metamask.io'
@@ -768,14 +772,13 @@ async function connectWallet() {
     console.log(`✅ Wallet connected: ${address}`);
     console.log(`💰 Balance: ${ethBalance.toFixed(4)} ETH`);
 
-    // Update UI
+    // Update UI - show address and balance
     if (cryptoStatus) {
       const shortAddr = `${address.slice(0,6)}...${address.slice(-4)}`;
       cryptoStatus.innerHTML = `💰 ${shortAddr}<br>${ethBalance.toFixed(3)} ETH`;
       cryptoStatus.style.color = '#0f0';
+      cryptoStatus.onclick = null;
     }
-
-    alert(`✅ Wallet Connected!\n\nAddress: ${address.slice(0,6)}...${address.slice(-4)}\nBalance: ${ethBalance.toFixed(4)} ETH`);
 
     return {
       success: true,
@@ -787,13 +790,12 @@ async function connectWallet() {
   } catch (error) {
     console.error('Wallet connection error:', error);
 
-    // Reset UI on error
+    // Show error in UI
     if (cryptoStatus) {
-      cryptoStatus.innerHTML = '🦊 CONNECT WALLET';
-      cryptoStatus.style.color = '';
+      cryptoStatus.innerHTML = `❌ ${error.message}<br><span style="font-size:0.4rem;opacity:0.6;">Click to retry</span>`;
+      cryptoStatus.style.color = '#f00';
+      cryptoStatus.onclick = () => connectWallet();
     }
-
-    alert(`❌ Connection Failed!\n\n${error.message}`);
 
     return {
       success: false,
