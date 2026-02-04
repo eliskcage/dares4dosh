@@ -720,8 +720,10 @@ function extractCrypto(aiReply) {
 
 // Connect to MetaMask wallet
 async function connectWallet() {
+  const cryptoStatus = document.getElementById('cryptoStatus');
+
   if (typeof window.ethereum === 'undefined') {
-    console.log('❌ MetaMask not installed');
+    alert('❌ MetaMask not installed!\n\nGet it at: https://metamask.io');
     return {
       success: false,
       error: 'MetaMask not installed. Get it at metamask.io'
@@ -729,6 +731,12 @@ async function connectWallet() {
   }
 
   try {
+    // Show connecting status
+    if (cryptoStatus) {
+      cryptoStatus.innerHTML = '🔄 CONNECTING...';
+      cryptoStatus.style.color = '#ff0';
+    }
+
     // Request account access
     const accounts = await window.ethereum.request({
       method: 'eth_requestAccounts'
@@ -761,12 +769,13 @@ async function connectWallet() {
     console.log(`💰 Balance: ${ethBalance.toFixed(4)} ETH`);
 
     // Update UI
-    const cryptoStatus = document.getElementById('cryptoStatus');
     if (cryptoStatus) {
       const shortAddr = `${address.slice(0,6)}...${address.slice(-4)}`;
       cryptoStatus.innerHTML = `💰 ${shortAddr}<br>${ethBalance.toFixed(3)} ETH`;
       cryptoStatus.style.color = '#0f0';
     }
+
+    alert(`✅ Wallet Connected!\n\nAddress: ${address.slice(0,6)}...${address.slice(-4)}\nBalance: ${ethBalance.toFixed(4)} ETH`);
 
     return {
       success: true,
@@ -777,6 +786,15 @@ async function connectWallet() {
 
   } catch (error) {
     console.error('Wallet connection error:', error);
+
+    // Reset UI on error
+    if (cryptoStatus) {
+      cryptoStatus.innerHTML = '🦊 CONNECT WALLET';
+      cryptoStatus.style.color = '';
+    }
+
+    alert(`❌ Connection Failed!\n\n${error.message}`);
+
     return {
       success: false,
       error: error.message
