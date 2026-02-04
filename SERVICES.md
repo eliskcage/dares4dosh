@@ -199,7 +199,7 @@ Click the **📎** button next to the message input to upload files.
 ## 📧 Notifications
 
 ### You Get Notified:
-- 📧 **Email** to `cortex@shortfactory.shop`
+- 📧 **Email** to `dan@shortfactory.shop`
 - 📅 **Calendar** event with ETA
 - 💬 **Chat** message with job details
 
@@ -253,7 +253,7 @@ Crypto Wallet: 0x1234...5678
 ### Email Notifications:
 ```javascript
 // Line ~870 in index.html
-const NOTIFICATION_EMAIL = 'cortex@shortfactory.shop'; // Your email
+const NOTIFICATION_EMAIL = 'dan@shortfactory.shop';
 
 // Integrate with:
 // - SendGrid API
@@ -367,7 +367,7 @@ Hourly rate: $50-100/hr
 
 ## 📞 Support
 
-**Email:** cortex@shortfactory.shop
+**Email:** dan@shortfactory.shop
 **GitHub Issues:** https://github.com/eliskcage/dares4dosh/issues
 **Live Chat:** Talk to CORTEX on site
 
